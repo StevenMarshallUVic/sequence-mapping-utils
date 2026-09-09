@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools >= 77.0.3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sm_sequence_mapping_utils"
+version = "1.0.0"
+authors = [
+  { name="Steven Marshall", email="stevenmarshall@uvic.ca" },
+]
+description = "Utilities for mapping sequences."
+readme = "README.md"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
+dependencies = [
+    "biopython",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.urls]
+Homepage = "https://github.com/StevenMarshallUVic/cluster-utils"
+Issues = "https://github.com/StevenMarshallUVic/cluster-utils/issues"

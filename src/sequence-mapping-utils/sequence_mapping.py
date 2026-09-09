@@ -1,0 +1,155 @@
+import logging
+import os
+from dataclasses import dataclass
+from pathlib import Path
+from multiprocessing import current_process
+
+from Bio import SeqIO
+from Bio.Seq import Seq
+
+logger = logging.getLogger(Path(__file__).name)
+
+
+@dataclass(frozen=True)
+class SequenceMapper:
+    """Provides helper methods for mapping sequences to IDs.
+
+    Attributes
+    ----------
+    seq_to_id
+        Mapping between sequences and their corresponding IDs.
+    """
+
+    seq_to_id: dict[Seq, str]
+
+    def find_ids_for_sequences(
+            self,
+            sequences: list[Seq]
+    ) -> dict[Seq, str | None]:
+        """Find IDs for each sequence.
+
+        Parameters
+        ----------
+        sequences
+            Sequences to find IDs for.
+
+        Returns
+        -------
+        dict[Seq, str | None]
+            Mapping between sequences and their corresponding IDs,
+            or None if no matching sequence could be found.
+        """
+
+        process_name = current_process().name
+        process_id = os.getpid()
+
+        seq_to_id: dict[Seq, str | None] = {}
+        for i, seq in enumerate(sequences):
+            if i % 25 == 0:
+                logger.debug(
+                    f"{process_name} - {process_id}: "
+                    f"{i}/{len(sequences)}...",
+                )
+            seq_to_id[seq] = self.find_id_of_sequence(seq)
+
+        logger.debug(f"{process_name} - {process_id}: Done!")
+        return seq_to_id
+
+    def find_id_of_sequence(
+            self,
+            sequence: Seq,
+    ) -> str | None:
+        """Find ID for a sequence.
+
+        Parameters
+        ----------
+        sequence
+            Sequence to find ID for.
+
+        Returns
+        -------
+        str | None
+            ID match, or None if no matching sequence could be found.
+        """
+        return self._find_id_of_sequence(sequence)
+
+    def _find_id_of_sequence(
+            self,
+            sequence: Seq,
+            trim_count=0
+    ) -> str | None:
+        """Find ID for a sequence.
+
+        Parameters
+        ----------
+        sequence
+            Sequence to find ID for.
+        trim_count
+            How many residues to trim from the termini of the sequence.
+
+        Returns
+        -------
+        str | None
+            ID match, or None if no matching sequence could be found.
+        """
+
+        trimmed_sequence = Seq(str(sequence)[trim_count:-trim_count]) \
+            if trim_count > 0 else sequence
+
+        # Attempt to find direct match
+        if trimmed_sequence in self.seq_to_id:
+            return self.seq_to_id[trimmed_sequence]
+
+        # Attempt to find subset match
+        ids = set()
+        for seq in self.seq_to_id:
+            if trimmed_sequence in seq:
+                ids.add(self.seq_to_id[seq])
+        if len(ids) == 1:
+            return ids.pop()
+        if len(ids) > 1:
+            raise ValueError(
+                f"Multiple subset matches for {trimmed_sequence}. "
+                f"Matches: {ids}."
+            )
+
+        # Attempt to find match with sequence trimmed if still long enough
+        if len(trimmed_sequence) > 8:
+            return self._find_id_of_sequence(
+                sequence,
+                trim_count=trim_count + 1
+            )
+
+        return None
+
+    @classmethod
+    def from_fasta(
+            cls,
+            fasta: Path,
+            id_split: str | None = None,
+    ):
+        """Create instance by mapping sequences in a FASTA file to their IDs.
+
+        Parameters
+        ----------
+        fasta
+            FASTA to map sequences to IDs for.
+        id_split
+            Optional substring to split upon for each sequence's ID.
+        """
+
+        seq_to_id: dict[Seq, str] = {}
+        for record in SeqIO.parse(fasta, "fasta"):
+            if record.seq in seq_to_id:
+                raise ValueError(
+                    f"Duplicate sequence. "
+                    f"Existing: {seq_to_id[record.seq]}. "
+                    f"New: {record.description}. Seq: {record.seq}."
+                )
+            seq_to_id[record.seq] = record.id \
+                if id_split is None \
+                else record.id.split(id_split)[0]
+
+        return cls(
+            seq_to_id=seq_to_id,
+        )
