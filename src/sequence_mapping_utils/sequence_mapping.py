@@ -18,16 +18,16 @@ class SequenceMapper:
 
     Attributes
     ----------
-    seq_to_id
+    seq_to_ids
         Mapping between sequences and their corresponding IDs.
     """
 
-    seq_to_id: dict[Seq, str]
+    seq_to_ids: dict[Seq, tuple[str, ...]]
 
     def find_ids_for_sequences(
             self,
             sequences: list[Seq]
-    ) -> dict[Seq, str | None]:
+    ) -> dict[Seq, tuple[str, ...] | None]:
         """Find IDs for each sequence.
 
         Parameters
@@ -37,7 +37,7 @@ class SequenceMapper:
 
         Returns
         -------
-        dict[Seq, str | None]
+        dict[Seq, tuple[str, ...] | None]
             Mapping between sequences and their corresponding IDs,
             or None if no matching sequence could be found.
         """
@@ -45,7 +45,7 @@ class SequenceMapper:
         process_name = current_process().name
         process_id = os.getpid()
 
-        seq_to_id: dict[Seq, str | None] = {}
+        seq_to_id: dict[Seq, tuple[str, ...] | None] = {}
         for i, seq in enumerate(sequences):
             if i % 25 == 0:
                 logger.debug(
@@ -60,7 +60,7 @@ class SequenceMapper:
     def find_id_for_sequence(
             self,
             sequence: Seq,
-    ) -> str | None:
+    ) -> tuple[str, ...] | None:
         """Find ID for a sequence.
 
         Parameters
@@ -70,7 +70,7 @@ class SequenceMapper:
 
         Returns
         -------
-        str | None
+        tuple[str, ...] | None
             ID match, or None if no matching sequence could be found.
         """
         return self._find_id_for_sequence(sequence)
@@ -79,7 +79,7 @@ class SequenceMapper:
             self,
             sequence: Seq,
             trim_count=0
-    ) -> str | None:
+    ) -> tuple[str, ...] | None:
         """Find ID for a sequence.
 
         Parameters
@@ -91,7 +91,7 @@ class SequenceMapper:
 
         Returns
         -------
-        str | None
+        tuple[str, ...] | None
             ID match, or None if no matching sequence could be found.
         """
 
@@ -99,14 +99,15 @@ class SequenceMapper:
             if trim_count > 0 else sequence
 
         # Attempt to find direct match
-        if trimmed_sequence in self.seq_to_id:
-            return self.seq_to_id[trimmed_sequence]
+        if trimmed_sequence in self.seq_to_ids:
+            return self.seq_to_ids[trimmed_sequence]
 
         # Attempt to find subset match
-        ids = set()
-        for seq in self.seq_to_id:
-            if trimmed_sequence in seq:
-                ids.add(self.seq_to_id[seq])
+        ids = {
+            self.seq_to_ids[seq]
+            for seq in self.seq_to_ids
+            if trimmed_sequence in seq
+        }
         if len(ids) == 1:
             return ids.pop()
         if len(ids) > 1:
@@ -140,29 +141,23 @@ class SequenceMapper:
             Optional substring to split upon for each sequence's ID.
         """
 
-        seq_to_id: dict[Seq, str] = {}
+        seq_to_id: dict[Seq, tuple[str, ...]] = {}
         for record in records:
             seq = record.seq
             if seq is None or isinstance(seq, MutableSeq):
                 raise ValueError(f"Expected type `Seq`, got `{type(seq)}`.")
 
-            if seq in seq_to_id:
-                raise ValueError(
-                    f"Duplicate sequence. "
-                    f"Existing: {seq_to_id[seq]}. "
-                    f"New: {record.description}. Seq: {seq}."
-                )
-
             record_id: str | None = record.id
             if record_id is None:
                 raise ValueError(f"Invalid id for record: {record}")
 
-            seq_to_id[seq] = record_id \
-                if id_split is None \
+            record_id: str = record_id if id_split is None \
                 else record_id.split(id_split)[0]
 
+            seq_to_id[seq] = (*seq_to_id.get(seq, tuple()), record_id)
+
         return cls(
-            seq_to_id=seq_to_id,
+            seq_to_ids=seq_to_id,
         )
 
     @classmethod
