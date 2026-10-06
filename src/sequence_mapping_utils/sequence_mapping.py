@@ -49,17 +49,20 @@ class SequenceMapper:
 
         process_name = current_process().name
         process_id = os.getpid()
+        log_status = len(sequences) > log_bin_size
 
         seq_to_id: dict[Seq, tuple[str, ...] | None] = {}
         for i, seq in enumerate(sequences):
-            if (len(sequences) > log_bin_size) and (i % log_bin_size == 0):
+            if log_status and (i % log_bin_size == 0):
                 logger.debug(
                     f"{process_name} - {process_id}: "
                     f"{i}/{len(sequences)}...",
                 )
             seq_to_id[seq] = self.find_id_for_sequence(seq)
 
-        logger.debug(f"{process_name} - {process_id}: Done!")
+        if log_status:
+            logger.debug(f"{process_name} - {process_id}: Done!")
+
         return seq_to_id
 
     def find_id_for_sequence(
