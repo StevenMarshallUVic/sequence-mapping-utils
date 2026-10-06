@@ -26,7 +26,8 @@ class SequenceMapper:
 
     def find_ids_for_sequences(
             self,
-            sequences: list[Seq]
+            sequences: list[Seq],
+            log_bin_size: int = 25
     ) -> dict[Seq, tuple[str, ...] | None]:
         """Find IDs for each sequence.
 
@@ -34,6 +35,10 @@ class SequenceMapper:
         ----------
         sequences
             Sequences to find IDs for.
+        log_bin_size
+            How many sequences to process between each status debug log message.
+            If number of sequences is less than this value, status logs are
+            not written.
 
         Returns
         -------
@@ -47,7 +52,7 @@ class SequenceMapper:
 
         seq_to_id: dict[Seq, tuple[str, ...] | None] = {}
         for i, seq in enumerate(sequences):
-            if i % 25 == 0:
+            if (len(sequences) > log_bin_size) and (i % log_bin_size == 0):
                 logger.debug(
                     f"{process_name} - {process_id}: "
                     f"{i}/{len(sequences)}...",
