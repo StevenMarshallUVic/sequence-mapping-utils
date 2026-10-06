@@ -112,8 +112,8 @@ class SequenceMapper:
             return ids.pop()
         if len(ids) > 1:
             raise ValueError(
-                f"Multiple subset matches for {trimmed_sequence}. "
-                f"Matches: {ids}."
+                f"Multiple subset matches for '{trimmed_sequence}'. "
+                f"Matches: '{ids}'. Full sequence: '{sequence}'."
             )
 
         # Attempt to find match with sequence trimmed if still long enough
