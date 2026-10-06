@@ -3,9 +3,11 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 from multiprocessing import current_process
+from typing import Self, Iterable
 
 from Bio import SeqIO
-from Bio.Seq import Seq
+from Bio.Seq import Seq, MutableSeq
+from Bio.SeqRecord import SeqRecord
 
 logger = logging.getLogger(Path(__file__).name)
 
@@ -50,12 +52,12 @@ class SequenceMapper:
                     f"{process_name} - {process_id}: "
                     f"{i}/{len(sequences)}...",
                 )
-            seq_to_id[seq] = self.find_id_of_sequence(seq)
+            seq_to_id[seq] = self.find_id_for_sequence(seq)
 
         logger.debug(f"{process_name} - {process_id}: Done!")
         return seq_to_id
 
-    def find_id_of_sequence(
+    def find_id_for_sequence(
             self,
             sequence: Seq,
     ) -> str | None:
@@ -71,9 +73,9 @@ class SequenceMapper:
         str | None
             ID match, or None if no matching sequence could be found.
         """
-        return self._find_id_of_sequence(sequence)
+        return self._find_id_for_sequence(sequence)
 
-    def _find_id_of_sequence(
+    def _find_id_for_sequence(
             self,
             sequence: Seq,
             trim_count=0
@@ -115,7 +117,7 @@ class SequenceMapper:
 
         # Attempt to find match with sequence trimmed if still long enough
         if len(trimmed_sequence) > 8:
-            return self._find_id_of_sequence(
+            return self._find_id_for_sequence(
                 sequence,
                 trim_count=trim_count + 1
             )
@@ -123,33 +125,60 @@ class SequenceMapper:
         return None
 
     @classmethod
-    def from_fasta(
+    def from_records(
             cls,
-            fasta: Path,
+            records: Iterable[SeqRecord],
             id_split: str | None = None,
-    ):
-        """Create instance by mapping sequences in a FASTA file to their IDs.
+    ) -> Self:
+        """Create instance by mapping records to their IDs.
 
         Parameters
         ----------
-        fasta
-            FASTA to map sequences to IDs for.
+        records
+            Records to map sequences to IDs for.
         id_split
             Optional substring to split upon for each sequence's ID.
         """
 
         seq_to_id: dict[Seq, str] = {}
-        for record in SeqIO.parse(fasta, "fasta"):
-            if record.seq in seq_to_id:
+        for record in records:
+            seq = record.seq
+            if seq is None or isinstance(seq, MutableSeq):
+                raise ValueError(f"Expected type `Seq`, got `{type(seq)}`.")
+
+            if seq in seq_to_id:
                 raise ValueError(
                     f"Duplicate sequence. "
-                    f"Existing: {seq_to_id[record.seq]}. "
-                    f"New: {record.description}. Seq: {record.seq}."
+                    f"Existing: {seq_to_id[seq]}. "
+                    f"New: {record.description}. Seq: {seq}."
                 )
-            seq_to_id[record.seq] = record.id \
+
+            record_id: str | None = record.id
+            if record_id is None:
+                raise ValueError(f"Invalid id for record: {record}")
+
+            seq_to_id[seq] = record_id \
                 if id_split is None \
-                else record.id.split(id_split)[0]
+                else record_id.split(id_split)[0]
 
         return cls(
             seq_to_id=seq_to_id,
+        )
+
+    @classmethod
+    def from_fasta(cls, fasta: Path, *args, **kwargs) -> Self:
+        """Create instance by mapping sequences in a FASTA file to their IDs.
+
+        See `from_records` method for descriptions of additional parameters.
+
+        Parameters
+        ----------
+        fasta
+            FASTA to map sequences to IDs for.
+        """
+
+        return cls.from_records(
+            SeqIO.parse(fasta, "fasta"),
+            *args,
+            **kwargs
         )
